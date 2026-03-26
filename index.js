@@ -1,13 +1,12 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
-const http = require('http'); // Required for Render health checks
+const http = require('http');
 
-// 1. KEEP RENDER AWAKE: Create a dummy server
-// Render expects a web service to listen on a port.
+// --- 1. RENDER HEALTH CHECK SERVER ---
 const port = process.env.PORT || 3000;
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.write('Office Bot is Running...');
+    res.write('Office Bot is Active');
     res.end();
 }).listen(port, () => {
     console.log(`Web server listening on port ${port}`);
@@ -15,17 +14,19 @@ http.createServer((req, res) => {
 
 const activeTimers = new Set();
 
-// 2. OPTIMIZED PUPPETEER: Crucial for low-RAM (512MB) hosting
+// --- 2. OPTIMIZED WHATSAPP CLIENT FOR RENDER ---
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
+        // This is the common path where Render/Puppeteer installs the browser
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
         headless: true,
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
             '--no-zygote',
-            '--single-process', // Reduces memory usage significantly
+            '--single-process',
             '--disable-gpu'
         ]
     }
@@ -37,7 +38,12 @@ const officeLinks = [
     "🏢 The Office - Top Pranks: https://www.youtube.com/watch?v=dYBS6QWio3k"
 ];
 
-client.on('qr', qr => qrcode.generate(qr, { small: true }));
+client.on('qr', qr => {
+    // This prints the QR code in your Render logs
+    qrcode.generate(qr, { small: true });
+    console.log('--- SCAN THE QR CODE ABOVE ---');
+});
+
 client.on('ready', () => console.log('✅ The Office Auto-Responder is online!'));
 
 client.on('message', async (msg) => {
@@ -53,13 +59,13 @@ client.on('message', async (msg) => {
             return; 
         }
 
-        // --- PART 2: The 30-Minute Logic ---
-        // Filters: No Groups, No "Me", No double timers
+        // --- PART 2: The Logic ---
         if (msg.fromMe || chat.isGroup || activeTimers.has(msg.from)) return;
 
         activeTimers.add(msg.from);
         console.log(`Timer started for: ${chat.name || msg.from}`);
 
+        // Note: Change to 1800000 (30 mins) once you're done testing!
         setTimeout(async () => {
             try {
                 const freshChat = await msg.getChat();
@@ -79,11 +85,13 @@ client.on('message', async (msg) => {
             } finally {
                 activeTimers.delete(msg.from);
             }
-        }, 30000); // Set to 30 minutes (1,800,000 ms) for production
+        }, 30000); // 30 seconds for test
 
     } catch (e) {
         console.error("Message handling error:", e);
     }
 });
 
-client.initialize();
+client.initialize().catch(err => {
+    console.error("Failed to initialize client:", err);
+});
