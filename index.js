@@ -13,9 +13,9 @@ http.createServer((req, res) => {
 });
 
 const activeTimers = new Set();
-let bootTime = 2147483647;
+let isBotReady = false; // New flag to prevent sync-triggers
 
-// --- 2. OPTIMIZED WHATSAPP CLIENT ---
+// --- 2. OPTIMIZED WHATSAPP CLIENT FOR RENDER ---
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
@@ -43,92 +43,70 @@ client.on('qr', qr => {
     console.log('--- SCAN THE QR CODE ABOVE ---');
 });
 
+// --- CRITICAL: Wait 15 seconds AFTER ready to let sync finish ---
 client.on('ready', () => {
-    bootTime = Math.floor(Date.now() / 1000);
-    console.log(`✅ Bot ready. bootTime set to ${bootTime} (${new Date().toISOString()})`);
+    console.log('✅ Bot authenticated. Waiting 15s for sync to settle...');
+    setTimeout(() => {
+        isBotReady = true;
+        console.log('🚀 LIVE: Listening for NEW messages now!');
+    }, 15000); 
 });
 
 client.on('message', async (msg) => {
     try {
-        console.log(`\n[MSG RECEIVED] from:${msg.from} | fromMe:${msg.fromMe} | timestamp:${msg.timestamp} | bootTime:${bootTime} | body:"${msg.body?.slice(0, 60)}"`);
-
-        // Ignore messages before boot
-        if (msg.timestamp < bootTime) {
-            console.log(`[IGNORED] Message is older than boot time, skipping.`);
-            return;
-        }
+        // 1. SYNC GUARD: Ignore everything until the 15s settle period is over
+        if (!isBotReady) return;
 
         const chat = await msg.getChat();
         const text = msg.body ? msg.body.toLowerCase().trim() : "";
 
-        console.log(`[CHAT INFO] name:"${chat.name}" | isGroup:${chat.isGroup} | activeTimers has sender:${activeTimers.has(msg.from)}`);
-
-        // Part 1: Instant "Office" trigger
+        // 2. PART 1: The "Office" Keyword (Instant)
         if (text === 'office' && !chat.isGroup) {
-            console.log(`[OFFICE TRIGGER] Sending office links to ${chat.name || msg.from}`);
-            const response =
-                "Excellent choice. 'Identity theft is not a joke, Jim!' 👓\n\n" +
-                "Here are some top Dunder Mifflin moments for your wait:\n\n" +
-                officeLinks.join('\n\n');
+            const response = "Excellent choice. 'Identity theft is not a joke, Jim!' 👓\n\nHere are some top Dunder Mifflin moments for your wait:\n\n" + officeLinks.join('\n\n');
             await msg.reply(response);
-            return;
+            console.log(`[INSTANT] Office clips sent to ${chat.name || msg.from}`);
+            return; 
         }
 
-        // Part 2: The 5-Minute Logic
-        if (msg.fromMe) {
-            console.log(`[IGNORED] Message is from me.`);
-            return;
-        }
-        if (chat.isGroup) {
-            console.log(`[IGNORED] Message is from a group.`);
-            return;
-        }
-        if (activeTimers.has(msg.from)) {
-            console.log(`[IGNORED] Timer already active for ${msg.from}.`);
-            return;
-        }
+        // 3. PART 2: The 5-Minute Timer Logic
+        // Filters: No Groups, No "Me", No double timers
+        if (msg.fromMe || chat.isGroup || activeTimers.has(msg.from)) return;
 
         activeTimers.add(msg.from);
-        console.log(`[TIMER START] ${chat.name || msg.from} at ${new Date().toISOString()} | activeTimers size: ${activeTimers.size}`);
+        
+        const startTime = new Date().toLocaleTimeString();
+        console.log(`[TIMER START] ${startTime} for ${chat.name || msg.from}`);
 
-        const timerStart = Date.now();
-
+        // 300,000 ms = Exactly 5 Minutes
         setTimeout(async () => {
-            const elapsed = Date.now() - timerStart;
-            console.log(`\n[TIMER FIRED] ${chat.name || msg.from} — elapsed: ${Math.round(elapsed / 1000)}s at ${new Date().toISOString()}`);
-
             try {
                 const freshChat = await msg.getChat();
-                const messages = await freshChat.fetchMessages({ limit: 10 });
+                const messages = await freshChat.fetchMessages({ limit: 1 });
+                const lastMessage = messages[0];
+                
+                const checkTime = new Date().toLocaleTimeString();
+                console.log(`[TIMER CHECK] ${checkTime} for ${chat.name || msg.from}`);
 
-                console.log(`[MESSAGES] fetched ${messages.length} messages for ${chat.name || msg.from}:`);
-                messages.forEach((m, i) => {
-                    console.log(`  [${i}] fromMe:${m.fromMe} | timestamp:${m.timestamp} | body:"${m.body?.slice(0, 40)}"`);
-                });
-
-                const lastMessage = messages[messages.length - 1];
-                console.log(`[LAST MSG CHECK] fromMe:${lastMessage?.fromMe} | body:"${lastMessage?.body?.slice(0, 40)}"`);
-
+                // Check if the last message in the chat is still from THEM
                 if (lastMessage && !lastMessage.fromMe) {
-                    console.log(`[SENDING] Auto-reply triggered for ${chat.name || msg.from}`);
-                    const walkMessage =
+                    const walkMessage = 
                         "Please wait, the user will reply. Until then, go for a walk! 🚶‍♂️\n\n" +
                         "Or, if you'd rather stay inside, reply with 'office' to watch some Dunder Mifflin highlights!";
+                    
                     await msg.reply(walkMessage);
-                    console.log(`[SENT] Auto-reply delivered to ${chat.name || msg.from}`);
+                    console.log(`[REPLY SENT] Auto-response sent to ${chat.name || msg.from}`);
                 } else {
-                    console.log(`[SKIPPED] Last message was from me — no auto-reply sent.`);
+                    console.log(`[CANCELLED] User already replied to ${chat.name || msg.from}`);
                 }
             } catch (err) {
-                console.error("[TIMER ERROR]", err);
+                console.error("Internal timer error:", err);
             } finally {
                 activeTimers.delete(msg.from);
-                console.log(`[TIMER CLEARED] ${chat.name || msg.from} removed from activeTimers | size now: ${activeTimers.size}`);
             }
-        }, 300000); // 5 minutes
+        }, 300000); 
 
     } catch (e) {
-        console.error("[MESSAGE HANDLER ERROR]", e);
+        console.error("General message error:", e);
     }
 });
 
