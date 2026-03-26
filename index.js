@@ -85,7 +85,7 @@ client.on('message', async (msg) => {
             } finally {
                 activeTimers.delete(msg.from);
             }
-        }, 30000); // 30 seconds for test
+        }, 300000); // 5 mins time
 
     } catch (e) {
         console.error("Message handling error:", e);
