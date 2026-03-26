@@ -1,0 +1,26 @@
+# --- Dependencies ---
+# Never push node_modules; Render will install these itself
+node_modules/
+
+# --- WhatsApp Session (Option B) ---
+# This ensures your private login data stays on your machine/server only
+.wwebjs_auth/
+.wwebjs_cache/
+
+# --- Environment & Logs ---
+.env
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# --- Operating System Files ---
+# Specifically for your MacBook Pro
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
