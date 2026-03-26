@@ -13,9 +13,10 @@ http.createServer((req, res) => {
 });
 
 const activeTimers = new Set();
-let bootTime = Math.floor(Date.now() / 1000); // Capture start time in seconds
+// Initialize bootTime to a very high number so nothing processes until 'ready'
+let bootTime = 2147483647; 
 
-// --- 2. OPTIMIZED WHATSAPP CLIENT FOR RENDER ---
+// --- 2. OPTIMIZED WHATSAPP CLIENT ---
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
@@ -43,63 +44,60 @@ client.on('qr', qr => {
     console.log('--- SCAN THE QR CODE ABOVE ---');
 });
 
+// --- CRITICAL: Set bootTime ONLY when fully ready ---
 client.on('ready', () => {
-    console.log('✅ The Office Auto-Responder is online!');
-    // Update bootTime to exactly when the client is ready
     bootTime = Math.floor(Date.now() / 1000);
+    console.log('✅ The Office Auto-Responder is online and listening for NEW messages!');
 });
 
 client.on('message', async (msg) => {
     try {
-        // --- FIX: TIMESTAMP GUARD ---
-        // If the message was sent before the bot was ready, ignore it.
-        if (msg.timestamp < bootTime) return;
+        // --- THE FIX: Ignore any message sent before the bot was ready ---
+        if (msg.timestamp < bootTime) {
+            return; 
+        }
 
         const chat = await msg.getChat();
         const text = msg.body ? msg.body.toLowerCase().trim() : "";
 
-        // --- PART 1: The "Office" Keyword Listener ---
+        // Part 1: Instant "Office" trigger
         if (text === 'office' && !chat.isGroup) {
             const response = "Excellent choice. 'Identity theft is not a joke, Jim!' 👓\n\nHere are some top Dunder Mifflin moments for your wait:\n\n" + officeLinks.join('\n\n');
             await msg.reply(response);
-            console.log(`Sent Office clips to ${chat.name || msg.from}`);
             return; 
         }
 
-        // --- PART 2: The Logic ---
+        // Part 2: The 5-Minute Logic
         if (msg.fromMe || chat.isGroup || activeTimers.has(msg.from)) return;
 
         activeTimers.add(msg.from);
         console.log(`Timer started for: ${chat.name || msg.from}`);
 
-        // 300,000ms = 5 minutes
         setTimeout(async () => {
             try {
                 const freshChat = await msg.getChat();
                 const messages = await freshChat.fetchMessages({ limit: 1 });
                 const lastMessage = messages[0];
 
-                // Double check it's still their message at the top
+                // Only send if the last message in the chat is still from them (they haven't been replied to)
                 if (lastMessage && !lastMessage.fromMe) {
                     const walkMessage = 
                         "Please wait, the user will reply. Until then, go for a walk! 🚶‍♂️\n\n" +
                         "Or, if you'd rather stay inside, reply with 'office' to watch some Dunder Mifflin highlights!";
                     
                     await msg.reply(walkMessage);
-                    console.log(`Sent "Walk + Office" offer to: ${chat.name || msg.from}`);
+                    console.log(`Timer triggered successfully for: ${chat.name || msg.from}`);
                 }
             } catch (err) {
-                console.error("Timeout logic error:", err);
+                console.error("Timer error:", err);
             } finally {
                 activeTimers.delete(msg.from);
             }
-        }, 300000); 
+        }, 300000); // 5 Minutes
 
     } catch (e) {
         console.error("Message handling error:", e);
     }
 });
 
-client.initialize().catch(err => {
-    console.error("Failed to initialize client:", err);
-});
+client.initialize().catch(err => console.error("Init error:", err));
