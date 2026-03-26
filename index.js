@@ -14,7 +14,7 @@ http.createServer((req, res) => {
 
 const activeTimers = new Set();
 // Initialize bootTime to a very high number so nothing processes until 'ready'
-let bootTime = 2147483647; 
+let bootTime = 2147483647;
 
 // --- 2. OPTIMIZED WHATSAPP CLIENT ---
 const client = new Client({
@@ -52,9 +52,9 @@ client.on('ready', () => {
 
 client.on('message', async (msg) => {
     try {
-        // --- THE FIX: Ignore any message sent before the bot was ready ---
+        // Ignore any message sent before the bot was ready
         if (msg.timestamp < bootTime) {
-            return; 
+            return;
         }
 
         const chat = await msg.getChat();
@@ -62,9 +62,12 @@ client.on('message', async (msg) => {
 
         // Part 1: Instant "Office" trigger
         if (text === 'office' && !chat.isGroup) {
-            const response = "Excellent choice. 'Identity theft is not a joke, Jim!' 👓\n\nHere are some top Dunder Mifflin moments for your wait:\n\n" + officeLinks.join('\n\n');
+            const response =
+                "Excellent choice. 'Identity theft is not a joke, Jim!' 👓\n\n" +
+                "Here are some top Dunder Mifflin moments for your wait:\n\n" +
+                officeLinks.join('\n\n');
             await msg.reply(response);
-            return; 
+            return;
         }
 
         // Part 2: The 5-Minute Logic
@@ -73,18 +76,32 @@ client.on('message', async (msg) => {
         activeTimers.add(msg.from);
         console.log(`Timer started for: ${chat.name || msg.from}`);
 
+        // Record exact start time to guard against early setTimeout fires
+        const timerStart = Date.now();
+
         setTimeout(async () => {
             try {
-                const freshChat = await msg.getChat();
-                const messages = await freshChat.fetchMessages({ limit: 1 });
-                const lastMessage = messages[0];
+                // Guard: bail out if timer fired too early (under 4.5 minutes)
+                const elapsed = Date.now() - timerStart;
+                if (elapsed < 270000) {
+                    console.log(`Timer fired too early (${Math.round(elapsed / 1000)}s elapsed), ignoring.`);
+                    return;
+                }
 
-                // Only send if the last message in the chat is still from them (they haven't been replied to)
+                const freshChat = await msg.getChat();
+
+                // Fetch multiple messages and take the last one to guarantee
+                // we're checking the most recent regardless of return order
+                const messages = await freshChat.fetchMessages({ limit: 10 });
+                const lastMessage = messages[messages.length - 1];
+
+                // Only send if the last message in the chat is still from them
+                // (i.e. they haven't been replied to yet)
                 if (lastMessage && !lastMessage.fromMe) {
-                    const walkMessage = 
+                    const walkMessage =
                         "Please wait, the user will reply. Until then, go for a walk! 🚶‍♂️\n\n" +
                         "Or, if you'd rather stay inside, reply with 'office' to watch some Dunder Mifflin highlights!";
-                    
+
                     await msg.reply(walkMessage);
                     console.log(`Timer triggered successfully for: ${chat.name || msg.from}`);
                 }
