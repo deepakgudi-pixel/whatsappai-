@@ -13,12 +13,12 @@ http.createServer((req, res) => {
 });
 
 const activeTimers = new Set();
+let bootTime = Math.floor(Date.now() / 1000); // Capture start time in seconds
 
 // --- 2. OPTIMIZED WHATSAPP CLIENT FOR RENDER ---
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        // This is the common path where Render/Puppeteer installs the browser
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
         headless: true,
         args: [
@@ -39,15 +39,22 @@ const officeLinks = [
 ];
 
 client.on('qr', qr => {
-    // This prints the QR code in your Render logs
     qrcode.generate(qr, { small: true });
     console.log('--- SCAN THE QR CODE ABOVE ---');
 });
 
-client.on('ready', () => console.log('✅ The Office Auto-Responder is online!'));
+client.on('ready', () => {
+    console.log('✅ The Office Auto-Responder is online!');
+    // Update bootTime to exactly when the client is ready
+    bootTime = Math.floor(Date.now() / 1000);
+});
 
 client.on('message', async (msg) => {
     try {
+        // --- FIX: TIMESTAMP GUARD ---
+        // If the message was sent before the bot was ready, ignore it.
+        if (msg.timestamp < bootTime) return;
+
         const chat = await msg.getChat();
         const text = msg.body ? msg.body.toLowerCase().trim() : "";
 
@@ -65,13 +72,14 @@ client.on('message', async (msg) => {
         activeTimers.add(msg.from);
         console.log(`Timer started for: ${chat.name || msg.from}`);
 
-        // Note: Change to 1800000 (30 mins) once you're done testing!
+        // 300,000ms = 5 minutes
         setTimeout(async () => {
             try {
                 const freshChat = await msg.getChat();
                 const messages = await freshChat.fetchMessages({ limit: 1 });
                 const lastMessage = messages[0];
 
+                // Double check it's still their message at the top
                 if (lastMessage && !lastMessage.fromMe) {
                     const walkMessage = 
                         "Please wait, the user will reply. Until then, go for a walk! 🚶‍♂️\n\n" +
@@ -85,7 +93,7 @@ client.on('message', async (msg) => {
             } finally {
                 activeTimers.delete(msg.from);
             }
-        }, 300000); // 5 mins time
+        }, 300000); 
 
     } catch (e) {
         console.error("Message handling error:", e);
