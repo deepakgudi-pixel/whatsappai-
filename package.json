@@ -3,13 +3,12 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "postinstall": "npx puppeteer browsers install chrome"
+    "start": "node index.js"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "WhatsApp auto-responder for DMs",
+  "author": "Deepak",
+  "license": "Apache-2.0",
+  "description": "WhatsApp auto-responder with 5-minute timer and Office clips",
   "dependencies": {
     "qrcode": "^1.5.3",
     "qrcode-terminal": "^0.12.0",

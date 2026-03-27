@@ -1,43 +1,41 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcodeTerminal = require('qrcode-terminal');
-const qrcodeDigit = require('qrcode'); // New package for web display
+const qrcodeDigit = require('qrcode');
 const http = require('http');
 
-let latestQrData = null; // Store QR here to show on webpage
-const activeTimers = new Set();
+let latestQrData = null;
 let isBotReady = false; 
+const activeTimers = new Set();
 
-// --- 1. IMPROVED WEB SERVER ---
-const port = process.env.PORT || 3000;
+// --- 1. UPDATED WEB SERVER FOR HUGGING FACE (Port 7860) ---
+const port = process.env.PORT || 7860; 
+
 http.createServer(async (req, res) => {
-    // If bot is ready, show a success message
+    // Standard health check for Hugging Face
     if (isBotReady) {
         res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end('<h1>✅ Office Bot is LIVE</h1><p>The bot is running and listening for messages.</p>');
+        res.end('<h1>✅ Office Bot is LIVE</h1><p>Running on 16GB RAM. Listening for messages...</p>');
         return;
     }
 
-    // If we have a QR code, show it as an image
     if (latestQrData) {
         try {
             const qrImage = await qrcodeDigit.toDataURL(latestQrData);
             res.writeHead(200, { 'Content-Type': 'text/html' });
             res.end(`
                 <div style="text-align:center; font-family:sans-serif; padding-top:50px;">
-                    <h1>Scan this QR Code</h1>
-                    <p>Open WhatsApp > Linked Devices > Link a Device</p>
+                    <h1>Scan to Link WhatsApp</h1>
                     <img src="${qrImage}" style="border: 20px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.1);" />
-                    <p>Wait 15s after scanning for the bot to start.</p>
-                    <script>setTimeout(() => location.reload(), 30000);</script>
+                    <p>The status will update automatically once linked.</p>
                 </div>
             `);
         } catch (err) {
             res.writeHead(500);
-            res.end('Error generating QR image');
+            res.end('Error generating QR');
         }
     } else {
         res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end('Bot is starting or authenticating... Refresh in 10 seconds.');
+        res.end('Bot starting... Please wait 30 seconds.');
     }
 }).listen(port, '0.0.0.0', () => {
     console.log(`Web server listening on port ${port}`);
@@ -52,8 +50,7 @@ const client = new Client({
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
-            '--no-zygote',
-            '--single-process'
+            '--no-zygote'
         ]
     }
 });
@@ -65,14 +62,14 @@ const officeLinks = [
 ];
 
 client.on('qr', qr => {
-    latestQrData = qr; // Save for the web server
-    qrcodeTerminal.generate(qr, { small: true }); // Still show in logs
-    console.log('--- QR CODE GENERATED: Refresh your Render URL to scan ---');
+    latestQrData = qr;
+    qrcodeTerminal.generate(qr, { small: true });
+    console.log('--- QR CODE READY: Refresh the App tab to scan ---');
 });
 
 client.on('ready', () => {
-    latestQrData = null; // Clear QR data
-    console.log('✅ Bot authenticated. Waiting 15s for sync to settle...');
+    latestQrData = null;
+    console.log('✅ Bot authenticated. Syncing...');
     setTimeout(() => {
         isBotReady = true;
         console.log('🚀 LIVE: Listening for NEW messages now!');
@@ -86,13 +83,16 @@ client.on('message', async (msg) => {
         const chat = await msg.getChat();
         const text = msg.body ? msg.body.toLowerCase().trim() : "";
 
+        // Keyword: Office
         if (text === 'office' && !chat.isGroup) {
             await msg.reply("Excellent choice. 'Identity theft is not a joke, Jim!' 👓\n\n" + officeLinks.join('\n\n'));
             return; 
         }
 
+        // Filters
         if (msg.fromMe || chat.isGroup || activeTimers.has(msg.from)) return;
 
+        // 5-Minute Timer Logic
         activeTimers.add(msg.from);
         console.log(`[TIMER START] for ${chat.name || msg.from}`);
 
@@ -102,13 +102,14 @@ client.on('message', async (msg) => {
                 const messages = await freshChat.fetchMessages({ limit: 1 });
                 if (messages[0] && !messages[0].fromMe) {
                     await msg.reply("Please wait, the user will reply. Until then, go for a walk! 🚶‍♂️\n\nOr reply 'office' for highlights!");
+                    console.log(`[REPLY SENT] to ${chat.name || msg.from}`);
                 }
             } catch (err) {
                 console.error("Timer error:", err);
             } finally {
                 activeTimers.delete(msg.from);
             }
-        }, 300000); // 5 Minutes
+        }, 300000); 
 
     } catch (e) {
         console.error("General error:", e);
