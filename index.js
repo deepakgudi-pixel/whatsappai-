@@ -1,24 +1,52 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const qrcodeTerminal = require('qrcode-terminal');
+const qrcodeDigit = require('qrcode'); // New package for web display
 const http = require('http');
 
-// --- 1. RENDER HEALTH CHECK SERVER ---
+let latestQrData = null; // Store QR here to show on webpage
+const activeTimers = new Set();
+let isBotReady = false; 
+
+// --- 1. IMPROVED WEB SERVER ---
 const port = process.env.PORT || 3000;
-http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Office Bot is Online and Healthy!'); // Fixed the "Not Found" error
+http.createServer(async (req, res) => {
+    // If bot is ready, show a success message
+    if (isBotReady) {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<h1>✅ Office Bot is LIVE</h1><p>The bot is running and listening for messages.</p>');
+        return;
+    }
+
+    // If we have a QR code, show it as an image
+    if (latestQrData) {
+        try {
+            const qrImage = await qrcodeDigit.toDataURL(latestQrData);
+            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.end(`
+                <div style="text-align:center; font-family:sans-serif; padding-top:50px;">
+                    <h1>Scan this QR Code</h1>
+                    <p>Open WhatsApp > Linked Devices > Link a Device</p>
+                    <img src="${qrImage}" style="border: 20px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.1);" />
+                    <p>Wait 15s after scanning for the bot to start.</p>
+                    <script>setTimeout(() => location.reload(), 30000);</script>
+                </div>
+            `);
+        } catch (err) {
+            res.writeHead(500);
+            res.end('Error generating QR image');
+        }
+    } else {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('Bot is starting or authenticating... Refresh in 10 seconds.');
+    }
 }).listen(port, '0.0.0.0', () => {
     console.log(`Web server listening on port ${port}`);
 });
 
-const activeTimers = new Set();
-let isBotReady = false; 
-
-// --- 2. UPDATED CLIENT FOR RENDER + POSTINSTALL ---
+// --- 2. CLIENT CONFIGURATION ---
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        // We REMOVED executablePath so it finds the 'postinstall' Chrome automatically
         headless: true,
         args: [
             '--no-sandbox',
@@ -37,11 +65,13 @@ const officeLinks = [
 ];
 
 client.on('qr', qr => {
-    qrcode.generate(qr, { small: true });
-    console.log('--- SCAN THE QR CODE ABOVE ---');
+    latestQrData = qr; // Save for the web server
+    qrcodeTerminal.generate(qr, { small: true }); // Still show in logs
+    console.log('--- QR CODE GENERATED: Refresh your Render URL to scan ---');
 });
 
 client.on('ready', () => {
+    latestQrData = null; // Clear QR data
     console.log('✅ Bot authenticated. Waiting 15s for sync to settle...');
     setTimeout(() => {
         isBotReady = true;
@@ -57,8 +87,7 @@ client.on('message', async (msg) => {
         const text = msg.body ? msg.body.toLowerCase().trim() : "";
 
         if (text === 'office' && !chat.isGroup) {
-            const response = "Excellent choice. 'Identity theft is not a joke, Jim!' 👓\n\n" + officeLinks.join('\n\n');
-            await msg.reply(response);
+            await msg.reply("Excellent choice. 'Identity theft is not a joke, Jim!' 👓\n\n" + officeLinks.join('\n\n'));
             return; 
         }
 
