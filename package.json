@@ -1,19 +1,24 @@
 {
-  "name": "whatsapp-walk-bot",
+  "name": "whatsapp-ai-assistant",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-  "keywords": [],
+  "keywords": [
+    "whatsapp",
+    "gemini",
+    "ai-assistant"
+  ],
   "author": "Deepak",
   "license": "Apache-2.0",
-  "description": "WhatsApp auto-responder with 5-minute timer and Office clips",
+  "description": "WhatsApp AI Assistant with Gemini Pro and Exit Logic",
   "dependencies": {
     "qrcode": "^1.5.3",
     "qrcode-terminal": "^0.12.0",
     "whatsapp-web.js": "^1.34.6",
-    "puppeteer": "^22.0.0"
+    "puppeteer": "^22.0.0",
+    "@google/generative-ai": "^0.21.0"
   },
   "engines": {
     "node": ">=18.0.0"

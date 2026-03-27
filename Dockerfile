@@ -1,20 +1,26 @@
-# Use the official Puppeteer image which includes Chrome and Node.js
+# 1. Use the official Puppeteer image (Includes Node.js + Chrome)
 FROM ghcr.io/puppeteer/puppeteer:latest
 
-# Switch to root to ensure we have permissions to install and copy
+# 2. Switch to root to handle file permissions
 USER root
 WORKDIR /app
 
-# Copy package files first to leverage Docker's cache
+# 3. Copy and Install dependencies
 COPY package*.json ./
 RUN npm install
 
-# Copy the rest of your application code
+# 4. Copy the rest of the code
 COPY . .
 
-# Hugging Face Spaces always uses port 7860
+# 5. FIX: Ensure the 'pptruser' has permission to write session data
+RUN chown -R pptruser:pptruser /app
+
+# 6. Switch back to the non-root user for security (Hugging Face Best Practice)
+USER pptruser
+
+# 7. Set Port for Hugging Face
 ENV PORT=7860
 EXPOSE 7860
 
-# Command to start your bot
+# 8. Start the bot
 CMD ["node", "index.js"]
