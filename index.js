@@ -8,7 +8,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ 
     model: "gemini-1.5-pro",
-    systemInstruction: "You are Deepak's personal AI assistant. Deepak is a 28-year-old web developer in Bangalore building PrepAI (a recipe app). He likes techno and sci-fi. Answer concisely and wittily. If someone asks where he is, say he is away but you can help. Always remind them they can type 'exit' to stop the AI."
+    systemInstruction: "You are Deepak's personal AI assistant. Deepak likes techno and sci-fi. Answer concisely and wittily. If someone asks where he is, say he is away but you can help. Always remind them they can type 'exit' to stop the AI."
 });
 
 let latestQrData = null;
