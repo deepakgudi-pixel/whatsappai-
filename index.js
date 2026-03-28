@@ -1,26 +1,22 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcodeDigit = require('qrcode');
 const http = require('http');
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const Groq = require('groq-sdk');
 
 // --- 1. AI CONFIGURATION ---
-// We use process.env so your key stays hidden in Hugging Face Settings
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ 
-    model: "gemini-1.5-pro",
-    systemInstruction: "You are Deepak's personal AI assistant. Deepak is a 28-year-old web developer in Bangalore building PrepAI (a recipe app). He likes techno and sci-fi. Answer concisely and wittily. If someone asks where he is, say he is away but you can help. Always remind them they can type 'exit' to stop the AI."
-});
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const SYSTEM_PROMPT = "You are Deepak's personal AI assistant. Deepak is a Jedi master. He likes techno, sci-fi, and listening to doomgaze artists like Shedfromthebody while coding. Answer concisely and wittily. If someone asks where he is, say he is away but you can help.";
 
 let latestQrData = null;
 let isBotReady = false;
-const mutedUsers = new Set(); // Tracks people who typed 'exit'
+const mutedUsers = new Map(); // Tracks 24h timer lockouts
 
 // --- 2. WEB SERVER FOR HUGGING FACE (Port 7860) ---
 const port = process.env.PORT || 7860; 
 http.createServer(async (req, res) => {
     if (isBotReady) {
         res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end('<h1>✅ Deepak\'s AI Assistant is LIVE</h1><p>The brain is active and listening.</p>');
+        res.end('<h1>✅ Deepak\'s AI Assistant is LIVE</h1><p>The Jedi brain is active and listening.</p>');
         return;
     }
     if (latestQrData) {
@@ -36,67 +32,109 @@ http.createServer(async (req, res) => {
 }).listen(port, '0.0.0.0');
 
 // --- 3. WHATSAPP CLIENT ---
+
+// 💥 THE FIX: Using the environment variable provided natively by the Puppeteer Docker Image
 const client = new Client({
-    authStrategy: new LocalAuth(),
+    authStrategy: new LocalAuth({ clientId: "groq-bot" }), // Forces a fresh session
     puppeteer: {
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH, // Automatically set by Docker
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--no-zygote']
+        args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox', 
+            '--disable-dev-shm-usage', 
+            '--no-zygote',
+            '--disable-gpu'
+        ]
     }
 });
 
-const officeLinks = [
-    "📦 The Best of Dwight Schrute: https://www.youtube.com/watch?v=XnQG6Vj0y2o",
-    "☕ Best of Michael Scott: https://www.youtube.com/watch?v=gO8N3L_aERg",
-    "🏢 The Office - Top Pranks: https://www.youtube.com/watch?v=dYBS6QWio3k"
-];
+client.on('qr', qr => { 
+    latestQrData = qr; 
+    console.log('🔄 New QR Code Generated! Check the web endpoint to scan.');
+});
 
-client.on('qr', qr => { latestQrData = qr; });
 client.on('ready', () => { 
     isBotReady = true; 
     latestQrData = null;
-    console.log('🚀 AI Assistant Ready!'); 
+    console.log('🚀 AI Assistant Ready! (Jedi Master Edition)'); 
+});
+
+// 🛡️ DISCONNECT CATCHER
+client.on('disconnected', (reason) => {
+    console.log('❌ WhatsApp Disconnected:', reason);
+    isBotReady = false;
+    client.destroy().then(() => {
+        console.log('🔄 Rebooting server...');
+        process.exit(0); // Forces Hugging Face to restart the app
+    });
 });
 
 client.on('message', async (msg) => {
     try {
         const chat = await msg.getChat();
-        if (msg.fromMe || chat.isGroup || !isBotReady) return;
+        const contactId = msg.from;
 
-        const text = msg.body ? msg.body.toLowerCase().trim() : "";
+        // Ignore Status updates, Groups, Yourself, or Empty texts
+        if (msg.from === 'status@broadcast' || chat.isGroup || msg.fromMe || !isBotReady) return;
+        if (!msg.body || msg.body.trim() === "") return;
 
-        // --- COMMAND: OFFICE ---
-        if (text === 'office') {
-            await msg.reply("Identity theft is not a joke, Jim! 👓\n\n" + officeLinks.join('\n\n'));
-            return;
+        const text = msg.body.toLowerCase().trim();
+        const now = Date.now();
+
+        // 24-Hour Lockout Check
+        if (mutedUsers.has(contactId)) {
+            if (now < mutedUsers.get(contactId)) return; 
+            else mutedUsers.delete(contactId);
         }
 
         // --- COMMAND: EXIT ---
         if (text === 'exit' || text === 'stop') {
-            mutedUsers.add(msg.from);
-            await msg.reply("Understood. I'll stay quiet now. Deepak will reply personally when he can. (Type 'start' to talk to me again!)");
+            mutedUsers.set(contactId, now + 24 * 60 * 60 * 1000);
+            await msg.reply("Understood. I'll stay quiet for 24 hours. The Jedi Master will reply personally when he can. (Type 'start' to wake me up early!)");
             return;
         }
 
         // --- COMMAND: START ---
         if (text === 'start') {
-            mutedUsers.delete(msg.from);
+            mutedUsers.delete(contactId);
             await msg.reply("I'm back! I am Deepak's AI Assistant. How can I help you?");
             return;
         }
 
         // --- AI RESPONSE LOGIC ---
-        if (!mutedUsers.has(msg.from)) {
-            // Trigger the Gemini Brain
-            const result = await model.generateContent(msg.body);
-            const response = await result.response;
-            let aiText = response.text();
-            
-            // Append the "Exit" tip to the first AI reply
-            await msg.reply(aiText + "\n\n_(Type 'exit' to end this AI chat)_");
+        await chat.sendSeen(); // Shows Blue Ticks
+
+        try {
+            const chatCompletion = await groq.chat.completions.create({
+                messages: [
+                    { role: "system", content: SYSTEM_PROMPT },
+                    { role: "user", content: msg.body }
+                ],
+                model: "llama-3.1-8b-instant", 
+                temperature: 0.7,
+                max_tokens: 150
+            });
+
+            let aiText = chatCompletion.choices[0]?.message?.content || "_(System hiccup, try again!)_";
+            await msg.reply(aiText + "\n\n_(Type 'exit' to mute me for 24h)_");
+
+        } catch (aiError) {
+            console.error("[GROQ ERROR]:", aiError.message);
+            await msg.reply("_(System: My AI brain is taking a quick breather. Give me 60 seconds!)_");
         }
 
     } catch (e) {
         console.error("General error:", e);
+    }
+});
+
+// 🛡️ HUMAN INTERVENTION KILL-SWITCH
+client.on('message_create', async (msg) => {
+    if (msg.fromMe && !msg.body.includes("Type 'exit' to mute me") && !msg.body.includes("System: My AI brain")) {
+        const contactId = msg.to;
+        mutedUsers.set(contactId, Date.now() + 24 * 60 * 60 * 1000);
+        console.log(`[HUMAN TAKEOVER] You texted ${contactId}. AI locked for 24 hours.`);
     }
 });
 

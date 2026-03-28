@@ -5,22 +5,25 @@ FROM ghcr.io/puppeteer/puppeteer:latest
 USER root
 WORKDIR /app
 
-# 3. Copy and Install dependencies
+# 3. Skip downloading Chromium during npm install (we already have it)
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
+# 4. Copy and Install dependencies
 COPY package*.json ./
 RUN npm install
 
-# 4. Copy the rest of the code
+# 5. Copy the rest of the code
 COPY . .
 
-# 5. FIX: Ensure the 'pptruser' has permission to write session data
+# 6. FIX: Ensure the 'pptruser' has permission to write session data
 RUN chown -R pptruser:pptruser /app
 
-# 6. Switch back to the non-root user for security (Hugging Face Best Practice)
+# 7. Switch back to the non-root user for security (Hugging Face Best Practice)
 USER pptruser
 
-# 7. Set Port for Hugging Face
+# 8. Set Port for Hugging Face
 ENV PORT=7860
 EXPOSE 7860
 
-# 8. Start the bot
+# 9. Start the bot
 CMD ["node", "index.js"]
