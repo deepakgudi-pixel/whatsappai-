@@ -7,7 +7,6 @@
 
 A highly secure, context-aware WhatsApp automation engine designed to act as a personal proxy. Built with **Node.js**, **Puppeteer**, and **Groq Cloud (LLaMA 3.3 70B)**, this system manages personal communications, enforces rate limits, and prioritizes data privacy through volatile-memory session management.
 
-> **🔒 Security Notice:** Because this system has direct access to my personal WhatsApp account and handles private conversations, the source code is kept in a private repository. This document outlines the system architecture, features, and engineering decisions. I am happy to provide a live code walk-through during technical interviews.
 
 ---
 
