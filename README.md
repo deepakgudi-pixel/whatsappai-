@@ -1,4 +1,4 @@
-# 📱 Personal AI WhatsApp Assistant
+# 📱 Personal AI for  WhatsApp 
 
 ![Status: Deployed](https://img.shields.io/badge/Status-Deployed-success?style=for-the-badge)
 ![Tech: Node.js](https://img.shields.io/badge/Tech-Node.js-339933?style=for-the-badge&logo=nodedotjs)
